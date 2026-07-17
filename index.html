@@ -305,6 +305,17 @@ html[data-theme="dark"] footer{border-top:1px solid var(--line)}
 .reveal{opacity:0;transform:translateY(18px);transition:opacity .6s var(--ease),transform .6s var(--ease)}
 .reveal.in{opacity:1;transform:none}
 @media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}*,*::before,*::after{animation-duration:.001ms !important;transition-duration:.001ms !important}}
+
+/* Premium interactions: scroll progress + cursor spotlight on cards */
+.scroll-progress{position:fixed;top:0;left:0;height:2.5px;width:0;z-index:200;pointer-events:none;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2));box-shadow:0 0 10px var(--accent-ring)}
+.res-card::after,.quick-card::after{content:"";position:absolute;inset:0;z-index:0;border-radius:inherit;
+  opacity:0;transition:opacity var(--t);pointer-events:none;
+  background:radial-gradient(340px circle at var(--mx,50%) var(--my,50%),var(--accent-soft),transparent 62%)}
+.res-card:hover::after,.quick-card:hover::after{opacity:1}
+.res-card>*,.quick-card>*{position:relative;z-index:1}
+@media (prefers-reduced-motion:reduce){.res-card::after,.quick-card::after{display:none}}
+
 @media (max-width:860px){
   .nav-links,.nav-search-btn{display:none}
   .nav-burger{display:grid}
@@ -980,7 +991,28 @@ function doRequest(){
 }
 /* ===================== ROUTER + RENDER ===================== */
 var currentView=null;
-function renderHub(){ renderHubChrome(); renderHubMain(); }
+function renderHub(){ renderHubChrome(); renderHubMain(); animateStats(); }
+var statsAnimated=false;
+function animateStats(){
+  var host=$("#stats"); if(!host || statsAnimated) return;
+  if(window.matchMedia && window.matchMedia("(prefers-reduced-motion:reduce)").matches){ statsAnimated=true; return; }
+  var so=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if(!en.isIntersecting) return;
+      statsAnimated=true; so.disconnect();
+      $$("#stats .v.mono").forEach(function(el){
+        var target=parseInt(el.textContent,10); if(isNaN(target)) return;
+        var start=performance.now(), dur=900;
+        (function step(now){
+          var p=Math.min((now-start)/dur,1), e=1-Math.pow(1-p,3);
+          el.textContent=Math.round(e*target);
+          if(p<1) requestAnimationFrame(step); else el.textContent=target;
+        })(start);
+      });
+    });
+  },{threshold:.4});
+  so.observe(host);
+}
 function renderAll(){ renderHubChrome(); renderHubMain(); paintIcons(); if(currentView==="admin"){ renderAdmin(); } }
 function route(){
   var h=location.hash||"";
@@ -1048,13 +1080,27 @@ document.addEventListener("keydown",function(e){
   if((e.key==="Enter"||e.key===" ")&&e.target&&e.target.hasAttribute&&e.target.hasAttribute("data-open")){ e.preventDefault(); openResource(e.target.getAttribute("data-open")); }
 });
 window.addEventListener("hashchange",route);
-window.addEventListener("scroll",function(){ var n=$("#nav"); if(n) n.classList.toggle("scrolled", window.scrollY>8); },{passive:true});
+var progressBar=document.createElement("div"); progressBar.className="scroll-progress"; document.body.appendChild(progressBar);
+function updateScroll(){
+  var n=$("#nav"); if(n) n.classList.toggle("scrolled", window.scrollY>8);
+  var doc=document.documentElement, max=doc.scrollHeight-doc.clientHeight;
+  progressBar.style.width=(max>0?(window.scrollY/max)*100:0)+"%";
+}
+window.addEventListener("scroll",updateScroll,{passive:true});
+window.addEventListener("resize",updateScroll,{passive:true});
+document.addEventListener("pointermove",function(e){
+  var c=e.target.closest && e.target.closest(".res-card,.quick-card"); if(!c) return;
+  var r=c.getBoundingClientRect();
+  c.style.setProperty("--mx",(e.clientX-r.left)+"px");
+  c.style.setProperty("--my",(e.clientY-r.top)+"px");
+},{passive:true});
 
 /* ===================== INIT ===================== */
 applyTheme(); applyLang(); paintIcons();
 $("#pal-search").addEventListener("input",function(e){ runSearch(e.target.value); });
 $("#palette-overlay").addEventListener("mousemove",function(e){ var it=e.target.closest(".pal-item"); if(it){ var i=parseInt(it.getAttribute("data-i"),10); if(i!==palSel){ palSel=i; $$(".pal-item").forEach(function(el){ el.classList.toggle("sel", parseInt(el.getAttribute("data-i"),10)===palSel); }); } } });
 route();
+updateScroll();
 </script>
 </body>
 </html>
