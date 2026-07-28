@@ -321,7 +321,8 @@ html[data-theme="dark"] .launch-choice .lc-ic{background:var(--surface)}
 .qr-view{display:flex;flex-direction:column;align-items:center;text-align:center;padding:4px 0 2px}
 .qr-card{background:#fff;padding:16px;border-radius:16px;border:1px solid var(--line);box-shadow:var(--shadow-1)}
 .qr-card svg{width:236px;height:236px;display:block}
-.qr-cap{display:inline-flex;align-items:center;gap:8px;margin-top:16px;font-family:var(--font-mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-2);font-weight:600}
+.qr-name{margin-top:16px;font-family:var(--font-display);font-size:1.15rem;font-weight:600;letter-spacing:-0.01em;color:var(--ink);max-width:360px;line-height:1.25}
+.qr-cap{display:inline-flex;align-items:center;gap:8px;margin-top:10px;font-family:var(--font-mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-2);font-weight:600}
 .qr-cap svg{width:15px;height:15px}
 .qr-url{margin-top:11px;font-size:11.5px;color:var(--ink-faint);word-break:break-all;max-width:360px;line-height:1.5}
 
@@ -681,6 +682,7 @@ function showQR(r){
   var body=
     '<div class="qr-view">'+
       '<div class="qr-card">'+qrSvg(abs)+'</div>'+
+      '<div class="qr-name">'+esc(L(r.title))+'</div>'+
       '<div class="qr-cap">'+icon("qr")+'<span>'+esc(t("qr_scan"))+'</span></div>'+
       '<div class="qr-url mono">'+esc(abs)+'</div>'+
     '</div>';
@@ -715,11 +717,21 @@ function downloadQR(id){
   var src="data:image/svg+xml;base64,"+btoa(unescape(encodeURIComponent(qrSvg(abs))));
   var im=new Image();
   im.onload=function(){
-    var cv=document.createElement("canvas"); cv.width=out; cv.height=out;
-    var ctx=cv.getContext("2d"); ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,out,out); ctx.imageSmoothingEnabled=false; ctx.drawImage(im,0,0,out,out);
+    var pad=Math.round(out*0.09), q=out-pad*2, band=Math.round(out*0.16), H=pad+q+band;
+    var cv=document.createElement("canvas"); cv.width=out; cv.height=H;
+    var ctx=cv.getContext("2d"); ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,out,H);
+    ctx.imageSmoothingEnabled=false; ctx.drawImage(im,pad,pad,q,q);
     var done=function(url,revoke){ var a=document.createElement("a"); a.href=url; a.download=qrSlug(L(r.title))+"-qr.png"; document.body.appendChild(a); a.click(); a.remove(); if(revoke) setTimeout(function(){URL.revokeObjectURL(url);},1000); toast(t("qr_downloaded"),"download"); };
-    if(cv.toBlob) cv.toBlob(function(b){ if(b) done(URL.createObjectURL(b),true); else done(cv.toDataURL("image/png"),false); },"image/png");
-    else done(cv.toDataURL("image/png"),false);
+    var exportPng=function(){ if(cv.toBlob) cv.toBlob(function(b){ if(b) done(URL.createObjectURL(b),true); else done(cv.toDataURL("image/png"),false); },"image/png"); else done(cv.toDataURL("image/png"),false); };
+    var drawLabel=function(){
+      var name=L(r.title), maxW=q, fam='"Hanken Grotesk","Noto Sans Thai",system-ui,sans-serif', size=Math.round(out*0.047), min=Math.round(out*0.026);
+      for(;size>=min;size-=2){ ctx.font="600 "+size+"px "+fam; if(ctx.measureText(name).width<=maxW) break; }
+      ctx.font="600 "+size+"px "+fam;
+      if(ctx.measureText(name).width>maxW){ while(name.length>1&&ctx.measureText(name+"…").width>maxW) name=name.slice(0,-1); name+="…"; }
+      ctx.fillStyle="#0a1b3d"; ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText(name, out/2, pad+q+band/2);
+    };
+    if(document.fonts&&document.fonts.ready) document.fonts.ready.then(function(){ drawLabel(); exportPng(); }); else { drawLabel(); exportPng(); }
   };
   im.onerror=function(){ toast(t("qr_dl_failed"),"warn"); };
   im.src=src;
