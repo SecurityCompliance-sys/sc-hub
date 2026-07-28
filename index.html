@@ -711,27 +711,35 @@ function printQR(id){
   w.document.close();
 }
 function qrSlug(s){ s=String(s||"qr").toLowerCase().replace(/[^a-z0-9฀-๿]+/g,"-").replace(/^-+|-+$/g,"").slice(0,60); return s||"qr"; }
+/* Composed printable card (QR + centred name) as one SVG. Centring via text-anchor="middle"
+   is honoured consistently across engines — unlike canvas textAlign, which iOS Safari mishandles. */
+function qrCardSvg(text, name){
+  var qr=QRC.encode(text,"M"), n=qr.size, quiet=4, total=n+quiet*2, d="";
+  for(var y=0;y<n;y++){ for(var x=0;x<n;x++){ if(qr.modules[y][x]) d+="M"+(x+quiet)+" "+(y+quiet)+"h1v1h-1z"; } }
+  var scale=10, qpx=total*scale, pad=Math.round(qpx*0.06), W=qpx+pad*2, labelH=Math.round(qpx*0.17), H=pad+qpx+labelH;
+  var maxW=qpx, fam="'Hanken Grotesk','Noto Sans Thai',system-ui,-apple-system,sans-serif";
+  var fs=Math.round(qpx*0.06), min=Math.round(qpx*0.032), mc=document.createElement("canvas").getContext("2d"), w=maxW;
+  for(;fs>=min;fs-=2){ mc.font="600 "+fs+"px "+fam; w=mc.measureText(name).width; if(w<=maxW) break; }
+  var lenAttr = w>maxW ? ' textLength="'+maxW+'" lengthAdjust="spacingAndGlyphs"' : '';
+  var ty=pad+qpx+Math.round(labelH*0.60);
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" shape-rendering="crispEdges">'+
+    '<rect width="'+W+'" height="'+H+'" fill="#ffffff"/>'+
+    '<g transform="translate('+pad+','+pad+') scale('+scale+')"><path d="'+d+'" fill="#0b0f18"/></g>'+
+    '<text x="'+(W/2)+'" y="'+ty+'" text-anchor="middle" dominant-baseline="middle" font-family="'+fam+'" font-weight="600" font-size="'+fs+'"'+lenAttr+' fill="#0a1b3d" shape-rendering="auto">'+esc(name)+'</text>'+
+    '</svg>';
+}
 function downloadQR(id){
   var r=state.resources.find(function(x){return x.id===id;}); if(!r) return;
   var abs=absUrl(r.url), out=1024;
-  var src="data:image/svg+xml;base64,"+btoa(unescape(encodeURIComponent(qrSvg(abs))));
+  var src="data:image/svg+xml;base64,"+btoa(unescape(encodeURIComponent(qrCardSvg(abs, L(r.title)))));
   var im=new Image();
   im.onload=function(){
-    var pad=Math.round(out*0.09), q=out-pad*2, band=Math.round(out*0.16), H=pad+q+band;
-    var cv=document.createElement("canvas"); cv.width=out; cv.height=H;
-    var ctx=cv.getContext("2d"); ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,out,H);
-    ctx.imageSmoothingEnabled=false; ctx.drawImage(im,pad,pad,q,q);
+    var W=im.naturalWidth||im.width||out, H=im.naturalHeight||im.height||out, outH=Math.round(out*(H/W));
+    var cv=document.createElement("canvas"); cv.width=out; cv.height=outH;
+    var ctx=cv.getContext("2d"); ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,out,outH); ctx.drawImage(im,0,0,out,outH);
     var done=function(url,revoke){ var a=document.createElement("a"); a.href=url; a.download=qrSlug(L(r.title))+"-qr.png"; document.body.appendChild(a); a.click(); a.remove(); if(revoke) setTimeout(function(){URL.revokeObjectURL(url);},1000); toast(t("qr_downloaded"),"download"); };
-    var exportPng=function(){ if(cv.toBlob) cv.toBlob(function(b){ if(b) done(URL.createObjectURL(b),true); else done(cv.toDataURL("image/png"),false); },"image/png"); else done(cv.toDataURL("image/png"),false); };
-    var drawLabel=function(){
-      var name=L(r.title), maxW=q, fam='"Hanken Grotesk","Noto Sans Thai",system-ui,sans-serif', size=Math.round(out*0.047), min=Math.round(out*0.026);
-      for(;size>=min;size-=2){ ctx.font="600 "+size+"px "+fam; if(ctx.measureText(name).width<=maxW) break; }
-      ctx.font="600 "+size+"px "+fam;
-      if(ctx.measureText(name).width>maxW){ while(name.length>1&&ctx.measureText(name+"…").width>maxW) name=name.slice(0,-1); name+="…"; }
-      ctx.fillStyle="#0a1b3d"; ctx.textAlign="center"; ctx.textBaseline="middle";
-      ctx.fillText(name, out/2, pad+q+band/2);
-    };
-    if(document.fonts&&document.fonts.ready) document.fonts.ready.then(function(){ drawLabel(); exportPng(); }); else { drawLabel(); exportPng(); }
+    if(cv.toBlob) cv.toBlob(function(b){ if(b) done(URL.createObjectURL(b),true); else done(cv.toDataURL("image/png"),false); },"image/png");
+    else done(cv.toDataURL("image/png"),false);
   };
   im.onerror=function(){ toast(t("qr_dl_failed"),"warn"); };
   im.src=src;
