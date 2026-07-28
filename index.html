@@ -265,7 +265,7 @@ html[data-theme="dark"] footer{border-top:1px solid var(--line)}
 .modal-head{display:flex;align-items:center;justify-content:space-between;padding:22px 24px;border-bottom:1px solid var(--line)}
 .modal-head h3{font-family:var(--font-display);font-size:1.25rem;font-weight:480;letter-spacing:-0.015em}
 .modal-body{padding:24px;overflow-y:auto}
-.modal-foot{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:18px 24px;border-top:1px solid var(--line);background:var(--surface-2)}
+.modal-foot{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:18px 24px;border-top:1px solid var(--line);background:var(--surface-2);flex-wrap:wrap}
 .iconpick{display:grid;grid-template-columns:repeat(8,1fr);gap:7px}
 .iconpick button{height:42px;border-radius:9px;border:1px solid var(--line);background:var(--surface-2);display:grid;place-items:center;color:var(--ink-soft);transition:all var(--t)}
 .iconpick button svg{width:18px;height:18px}
@@ -484,7 +484,7 @@ const UI = {
     no_url:"This resource has no link yet — add a URL in Admin.",
     launch_open:"Open link", launch_open_sub:"Go straight to the destination in a new tab",
     launch_qr:"Show QR code", launch_qr_sub:"Scan from another device — print & share",
-    qr_scan:"Scan to open", qr_print:"Print", launch_back:"Back", qr_print_blocked:"Allow pop-ups to print the QR code",
+    qr_scan:"Scan to open", qr_print:"Print", qr_download:"Download", qr_downloaded:"QR code downloaded", qr_dl_failed:"Could not generate the image", launch_back:"Back", qr_print_blocked:"Allow pop-ups to print the QR code",
     exported:"Data exported", imported:"Data imported", saved:"Saved", deleted:"Deleted",
     admin_console:"Admin console", back_hub:"Back to hub",
     tab_resources:"Resources", tab_categories:"Categories", tab_analytics:"Analytics", tab_settings:"Settings",
@@ -532,7 +532,7 @@ const UI = {
     no_url:"ทรัพยากรนี้ยังไม่มีลิงก์ — เพิ่ม URL ได้ในหน้าผู้ดูแล",
     launch_open:"ไปยังลิงก์", launch_open_sub:"เปิดปลายทางในแท็บใหม่ทันที",
     launch_qr:"แสดง QR โค้ด", launch_qr_sub:"สแกนจากอุปกรณ์อื่น — พิมพ์และแจกจ่ายได้",
-    qr_scan:"สแกนเพื่อเปิด", qr_print:"พิมพ์", launch_back:"ย้อนกลับ", qr_print_blocked:"อนุญาตป๊อปอัปเพื่อพิมพ์ QR โค้ด",
+    qr_scan:"สแกนเพื่อเปิด", qr_print:"พิมพ์", qr_download:"ดาวน์โหลด", qr_downloaded:"ดาวน์โหลด QR โค้ดแล้ว", qr_dl_failed:"สร้างรูปภาพไม่สำเร็จ", launch_back:"ย้อนกลับ", qr_print_blocked:"อนุญาตป๊อปอัปเพื่อพิมพ์ QR โค้ด",
     exported:"ส่งออกข้อมูลแล้ว", imported:"นำเข้าข้อมูลแล้ว", saved:"บันทึกแล้ว", deleted:"ลบแล้ว",
     admin_console:"คอนโซลผู้ดูแล", back_hub:"กลับสู่พอร์ทัล",
     tab_resources:"ทรัพยากร", tab_categories:"หมวดหมู่", tab_analytics:"สถิติการใช้งาน", tab_settings:"ตั้งค่า",
@@ -686,6 +686,7 @@ function showQR(r){
     '</div>';
   var foot=
     '<button class="btn ghost" style="margin-right:auto" data-launch-back="'+esc(r.id)+'">'+icon("back")+'<span>'+esc(t("launch_back"))+'</span></button>'+
+    '<button class="btn" data-launch-download="'+esc(r.id)+'">'+icon("download")+'<span>'+esc(t("qr_download"))+'</span></button>'+
     '<button class="btn" data-launch-print="'+esc(r.id)+'">'+icon("print")+'<span>'+esc(t("qr_print"))+'</span></button>'+
     '<button class="btn primary" data-launch-open="'+esc(r.id)+'">'+icon("arrowUR")+'<span>'+esc(t("launch_open"))+'</span></button>';
   openModal(L(r.title), body, foot);
@@ -706,6 +707,22 @@ function printQR(id){
     '<div class="card"><h1>'+title+'</h1><div class="sub">'+cap+'</div>'+svg+'<div class="u">'+esc(abs)+'</div></div>'+
     '<'+'script>window.onload=function(){setTimeout(function(){window.print();},180);};<'+'/script></body></html>');
   w.document.close();
+}
+function qrSlug(s){ s=String(s||"qr").toLowerCase().replace(/[^a-z0-9฀-๿]+/g,"-").replace(/^-+|-+$/g,"").slice(0,60); return s||"qr"; }
+function downloadQR(id){
+  var r=state.resources.find(function(x){return x.id===id;}); if(!r) return;
+  var abs=absUrl(r.url), out=1024;
+  var src="data:image/svg+xml;base64,"+btoa(unescape(encodeURIComponent(qrSvg(abs))));
+  var im=new Image();
+  im.onload=function(){
+    var cv=document.createElement("canvas"); cv.width=out; cv.height=out;
+    var ctx=cv.getContext("2d"); ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,out,out); ctx.imageSmoothingEnabled=false; ctx.drawImage(im,0,0,out,out);
+    var done=function(url,revoke){ var a=document.createElement("a"); a.href=url; a.download=qrSlug(L(r.title))+"-qr.png"; document.body.appendChild(a); a.click(); a.remove(); if(revoke) setTimeout(function(){URL.revokeObjectURL(url);},1000); toast(t("qr_downloaded"),"download"); };
+    if(cv.toBlob) cv.toBlob(function(b){ if(b) done(URL.createObjectURL(b),true); else done(cv.toDataURL("image/png"),false); },"image/png");
+    else done(cv.toDataURL("image/png"),false);
+  };
+  im.onerror=function(){ toast(t("qr_dl_failed"),"warn"); };
+  im.src=src;
 }
 function qrSvg(text){
   var qr=QRC.encode(text,"M"), size=qr.size, quiet=4, total=size+quiet*2, d="";
@@ -1249,6 +1266,7 @@ document.addEventListener("click",function(e){
   var lq=e.target.closest("[data-launch-qr]"); if(lq){ var rq=state.resources.find(function(x){return x.id===lq.getAttribute("data-launch-qr");}); if(rq) showQR(rq); return; }
   var lb=e.target.closest("[data-launch-back]"); if(lb){ var rb=state.resources.find(function(x){return x.id===lb.getAttribute("data-launch-back");}); if(rb) openLaunch(rb); return; }
   var lp=e.target.closest("[data-launch-print]"); if(lp){ printQR(lp.getAttribute("data-launch-print")); return; }
+  var ld=e.target.closest("[data-launch-download]"); if(ld){ downloadQR(ld.getAttribute("data-launch-download")); return; }
   var po=e.target.closest("[data-palopen]"); if(po){ var id=po.getAttribute("data-palopen"); closeSearch(); openResource(id); return; }
   var tab=e.target.closest("[data-tab]"); if(tab){ adminTab=tab.getAttribute("data-tab"); renderAdmin(); return; }
   var er=e.target.closest("[data-editres]"); if(er){ openResForm(er.getAttribute("data-editres")); return; }
