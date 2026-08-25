@@ -949,18 +949,40 @@ function renderHubMain(){
   $("#hub-main").innerHTML=html;
   observeReveals();
 }
-var io=null;
+var io=null, revealTimers=[];
+/* Safety net independent of IntersectionObserver (which can fail to fire the
+   initial intersection on iOS Safari, esp. when pinch-zoomed — leaving content
+   stuck at opacity:0). Uses getBoundingClientRect, which is always reliable. */
+function revealInView(){
+  var vh=window.innerHeight||document.documentElement.clientHeight;
+  $$(".reveal").forEach(function(el){
+    if(el.classList.contains("in")) return;
+    var r=el.getBoundingClientRect();
+    if(r.top<vh+80 && r.bottom>-80) el.classList.add("in");
+  });
+}
 function observeReveals(){
-  if(io) io.disconnect();
-  io = new IntersectionObserver(function(entries){ entries.forEach(function(e){
-    if(!e.isIntersecting) return;
-    var el=e.target, idx=0;
-    if(el.parentNode){ var sibs=el.parentNode.children, k=0; for(var i=0;i<sibs.length;i++){ if(sibs[i]===el){ idx=k; break; } if(sibs[i].classList&&sibs[i].classList.contains("reveal")) k++; } }
-    var d=Math.min(idx,8)*70; el.style.transitionDelay=d+"ms"; el.classList.add("in");
-    (function(node){ setTimeout(function(){ node.style.transitionDelay=""; }, 720+d); })(el);
-    io.unobserve(el);
-  }); },{threshold:.08,rootMargin:"0px 0px -40px 0px"});
-  $$(".reveal").forEach(function(el){io.observe(el);});
+  if(io){ try{ io.disconnect(); }catch(e){} io=null; }
+  try{
+    if(typeof window.IntersectionObserver==="function"){
+      io = new IntersectionObserver(function(entries){ entries.forEach(function(e){
+        if(!e.isIntersecting) return;
+        var el=e.target; if(el.classList.contains("in")){ io.unobserve(el); return; }
+        var idx=0;
+        if(el.parentNode){ var sibs=el.parentNode.children, k=0; for(var i=0;i<sibs.length;i++){ if(sibs[i]===el){ idx=k; break; } if(sibs[i].classList&&sibs[i].classList.contains("reveal")) k++; } }
+        var d=Math.min(idx,8)*70; el.style.transitionDelay=d+"ms"; el.classList.add("in");
+        (function(node){ setTimeout(function(){ node.style.transitionDelay=""; }, 720+d); })(el);
+        io.unobserve(el);
+      }); },{threshold:.08,rootMargin:"0px 0px -40px 0px"});
+      $$(".reveal").forEach(function(el){io.observe(el);});
+    }
+  }catch(e){ io=null; }
+  // Guarantee above-the-fold content shows immediately, and nothing stays hidden.
+  revealInView();
+  revealTimers.forEach(clearTimeout); revealTimers=[];
+  revealTimers.push(setTimeout(revealInView,350));
+  revealTimers.push(setTimeout(revealInView,1200));
+  revealTimers.push(setTimeout(function(){ $$(".reveal").forEach(function(el){ el.classList.add("in"); }); },2800));
 }
 var palSel=0, palItems=[];
 function openSearch(){ $("#palette-overlay").classList.add("open"); var i=$("#pal-search"); i.value=""; runSearch(""); document.body.style.overflow="hidden"; setTimeout(function(){i.focus();},30); }
@@ -1241,6 +1263,7 @@ var statsAnimated=false;
 function animateStats(){
   var host=$("#stats"); if(!host || statsAnimated) return;
   if(window.matchMedia && window.matchMedia("(prefers-reduced-motion:reduce)").matches){ statsAnimated=true; return; }
+  if(typeof window.IntersectionObserver!=="function"){ statsAnimated=true; return; }
   var so=new IntersectionObserver(function(entries){
     entries.forEach(function(en){
       if(!en.isIntersecting) return;
@@ -1335,9 +1358,11 @@ function updateScroll(){
   var n=$("#nav"); if(n) n.classList.toggle("scrolled", window.scrollY>8);
   var doc=document.documentElement, max=doc.scrollHeight-doc.clientHeight;
   progressBar.style.width=(max>0?(window.scrollY/max)*100:0)+"%";
+  if(currentView==="hub") revealInView();
 }
 window.addEventListener("scroll",updateScroll,{passive:true});
 window.addEventListener("resize",updateScroll,{passive:true});
+if(window.visualViewport){ window.visualViewport.addEventListener("resize",revealInView,{passive:true}); window.visualViewport.addEventListener("scroll",revealInView,{passive:true}); }
 document.addEventListener("pointermove",function(e){
   var c=e.target.closest && e.target.closest(".res-card,.quick-card"); if(!c) return;
   var r=c.getBoundingClientRect();
