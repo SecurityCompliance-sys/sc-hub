@@ -1,0 +1,14 @@
+{
+  "name": "Security & Compliance Hub",
+  "short_name": "S&C Hub",
+  "description": "Internal directory of tools, forms, dashboards and references for the Security & Compliance team.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F4F6FA",
+  "theme_color": "#08152F",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "maskable" }
+  ]
+}
